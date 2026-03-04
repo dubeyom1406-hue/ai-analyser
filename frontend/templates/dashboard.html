@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SalesCast AI{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Real-time overview of sales performance & AI predictions{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div id="alert-container"></div>
+
+<!-- STATS -->
+<div class="grid-4" id="stats-grid">
+  <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value" style="color:var(--accent)" id="stat-revenue">—</div><div class="stat-change" id="stat-growth">Loading...</div></div>
+  <div class="stat-card"><div class="stat-label">Total Units Sold</div><div class="stat-value" style="color:var(--accent3)" id="stat-units">—</div><div class="stat-change up" id="stat-records">— records</div></div>
+  <div class="stat-card"><div class="stat-label">Products Tracked</div><div class="stat-value" style="color:var(--accent2)" id="stat-products">—</div><div class="stat-change up">Active SKUs</div></div>
+  <div class="stat-card"><div class="stat-label">This Month</div><div class="stat-value" style="color:var(--danger)" id="stat-month">—</div><div class="stat-change up">Revenue MTD</div></div>
+</div>
+
+<!-- CHART + SIGNALS -->
+<div class="grid-main">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div>
+        <div class="card-title">Sales Trend</div>
+        <div class="card-sub">Last 90 days — revenue & units</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary" onclick="loadChart(30)">30D</button>
+        <button class="btn btn-secondary" onclick="loadChart(60)">60D</button>
+        <button class="btn btn-secondary" onclick="loadChart(90)" style="border-color:var(--accent);color:var(--accent)">90D</button>
+      </div>
+    </div>
+    <canvas id="salesChart" height="280"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px">Top Products</div>
+    <div id="product-list">
+      <div style="color:var(--muted);font-size:12px">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM -->
+<div class="grid-3">
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px">Demand Signals</div>
+    <div id="demand-signals">
+      <div style="color:var(--muted);font-size:12px">Loading...</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="margin-bottom:4px">Quick Forecast</div>
+    <div class="card-sub" style="margin-bottom:16px">Run a quick 30-day prediction</div>
+    <div class="form-group">
+      <label class="form-label">MODEL</label>
+      <select class="form-control" id="quick-model">
+        <option value="xgboost">XGBoost (Best Accuracy)</option>
+        <option value="random_forest">Random Forest</option>
+        <option value="linear_regression">Linear Regression</option>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-full" id="quick-forecast-btn" onclick="quickForecast()">⚡ Run Forecast</button>
+    <div id="quick-result" style="margin-top:14px"></div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px">Recent Uploads</div>
+    <div id="upload-list"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let salesChart = null;
+
+async function loadStats() {
+  try {
+    const data = await API.get('/api/data/summary');
+    document.getElementById('stat-revenue').textContent = formatCurrency(data.total_revenue);
+    document.getElementById('stat-units').textContent = formatNumber(data.total_units);
+    document.getElementById('stat-products').textContent = data.total_products;
+    document.getElementById('stat-month').textContent = formatCurrency(data.this_month_revenue);
+    const g = data.growth_percent;
+    const el = document.getElementById('stat-growth');
+    el.textContent = (g >= 0 ? '↑ +' : '↓ ') + g + '% vs last month';
+    el.className = 'stat-change ' + (g >= 0 ? 'up' : 'down');
+    document.getElementById('stat-records').textContent = `${formatNumber(data.total_records)} records`;
+  } catch(e) { console.error(e); }
+}
+
+async function loadChart(days = 90) {
+  try {
+    const data = await API.get(`/api/data/chart/daily?days=${days}`);
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    if (salesChart) salesChart.destroy();
+    salesChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: 'Revenue',
+            data: data.revenue,
+            borderColor: '#00E5A0',
+            backgroundColor: 'rgba(0,229,160,0.06)',
+            borderWidth: 2,
+            tension: 0.4,
+            fill: true,
+            pointRadius: 0,
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#5A8070', font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 10 }, grid: { color: 'rgba(26,45,56,0.6)' } },
+          y: { ticks: { color: '#5A8070', font: { family: 'IBM Plex Mono', size: 10 }, callback: v => formatCurrency(v) }, grid: { color: 'rgba(26,45,56,0.6)' } },
+        }
+      }
+    });
+  } catch(e) { console.error(e); }
+}
+
+async function loadProducts() {
+  try {
+    const data = await API.get('/api/products/performance');
+    const top5 = data.slice(0, 5);
+    const maxRev = top5[0]?.total_revenue || 1;
+    document.getElementById('product-list').innerHTML = top5.map((p, i) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);width:18px">#${i+1}</span>
+        <span style="flex:1;font-size:13px;font-weight:500">${p.name}</span>
+        <div style="width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div style="width:${(p.total_revenue/maxRev*100).toFixed(0)}%;height:100%;background:var(--accent);border-radius:2px"></div>
+        </div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);width:55px;text-align:right">${formatCurrency(p.total_revenue)}</span>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+async function loadSignals() {
+  try {
+    const d = await API.get('/api/forecast/demand-signals');
+    document.getElementById('demand-signals').innerHTML = `
+      <div class="metric-row"><span class="metric-key">Peak Day</span><span class="metric-val" style="color:var(--accent)">${d.peak_day_of_week}</span></div>
+      <div class="metric-row"><span class="metric-key">Peak Month</span><span class="metric-val" style="color:var(--accent3)">${d.peak_month}</span></div>
+      <div class="metric-row"><span class="metric-key">Seasonal ×</span><span class="metric-val" style="color:var(--accent2)">${d.seasonal_multiplier}×</span></div>
+      <div class="metric-row"><span class="metric-key">7-Day Trend</span><span class="metric-val" style="color:${d.trend_7day_pct>=0?'var(--accent)':'var(--danger)'}">${d.trend_7day_pct>0?'+':''}${d.trend_7day_pct}%</span></div>
+      <div class="metric-row"><span class="metric-key">Avg Daily Units</span><span class="metric-val">${d.avg_daily_units}</span></div>
+      <div class="metric-row"><span class="metric-key">Rec. Stock</span><span class="metric-val">${formatNumber(d.recommended_stock)}</span></div>
+    `;
+  } catch(e) {}
+}
+
+async function loadUploads() {
+  try {
+    const data = await API.get('/api/data/uploads');
+    if (!data.length) { document.getElementById('upload-list').innerHTML = '<div style="color:var(--muted);font-size:12px">No uploads yet</div>'; return; }
+    document.getElementById('upload-list').innerHTML = data.slice(0,5).map(u => `
+      <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="font-weight:500;margin-bottom:2px">${u.original_name}</div>
+        <div style="color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:10px">${u.rows_imported} rows · <span class="badge badge-green">${u.status}</span></div>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+async function quickForecast() {
+  setLoading('quick-forecast-btn', true);
+  const model = document.getElementById('quick-model').value;
+  try {
+    const data = await API.post('/api/forecast/run', { model_type: model, days: 30 });
+    document.getElementById('quick-result').innerHTML = `
+      <div class="alert alert-success">
+        ✓ Forecast complete! Predicted <strong>${formatNumber(data.total_predicted_units)}</strong> units / <strong>${formatCurrency(data.total_predicted_revenue)}</strong> revenue in 30 days. Accuracy: ${data.metrics.accuracy}%
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('quick-result').innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+  }
+  setLoading('quick-forecast-btn', false);
+}
+
+// Load all
+loadStats();
+loadChart(90);
+loadProducts();
+loadSignals();
+loadUploads();
+</script>
+{% endblock %}

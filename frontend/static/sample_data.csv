@@ -1,0 +1,19 @@
+date,product_name,category,quantity_sold,revenue,region,price,stock
+2024-01-01,Laptop Pro X1,Electronics,10,850000,North,85000,200
+2024-01-01,Wireless Buds,Electronics,38,133000,South,3500,500
+2024-01-01,Smart Watch S,Wearables,6,72000,East,12000,300
+2024-01-02,Laptop Pro X1,Electronics,12,1020000,West,85000,200
+2024-01-02,USB-C Hub 7in1,Accessories,22,48400,North,2200,400
+2024-01-02,Gaming Mouse Z,Peripherals,15,67500,South,4500,250
+2024-01-03,Wireless Buds,Electronics,41,143500,East,3500,500
+2024-01-03,Smart Watch S,Wearables,9,108000,West,12000,300
+2024-01-03,Laptop Pro X1,Electronics,8,680000,North,85000,200
+2024-01-04,Gaming Mouse Z,Peripherals,20,90000,South,4500,250
+2024-01-04,USB-C Hub 7in1,Accessories,30,66000,East,2200,400
+2024-01-04,Wireless Buds,Electronics,35,122500,West,3500,500
+2024-01-05,Laptop Pro X1,Electronics,15,1275000,North,85000,200
+2024-01-05,Smart Watch S,Wearables,11,132000,South,12000,300
+2024-01-06,Wireless Buds,Electronics,50,175000,East,3500,500
+2024-01-06,Gaming Mouse Z,Peripherals,18,81000,West,4500,250
+2024-01-07,Laptop Pro X1,Electronics,20,1700000,North,85000,200
+2024-01-07,USB-C Hub 7in1,Accessories,25,55000,South,2200,400

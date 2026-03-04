@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Products — SalesCast AI{% endblock %}
+{% block page_title %}Products{% endblock %}
+{% block page_sub %}Manage your product catalog and view performance analytics{% endblock %}
+
+{% block content %}
+<div id="alert-container"></div>
+
+<div class="grid-2" style="margin-bottom:20px">
+  <!-- ADD PRODUCT -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px">Add New Product</div>
+    <div class="form-group">
+      <label class="form-label">PRODUCT NAME</label>
+      <input class="form-control" type="text" id="prod-name" placeholder="e.g. Laptop Pro X1">
+    </div>
+    <div class="form-group">
+      <label class="form-label">CATEGORY</label>
+      <input class="form-control" type="text" id="prod-cat" placeholder="e.g. Electronics">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">PRICE (₹)</label>
+        <input class="form-control" type="number" id="prod-price" placeholder="e.g. 85000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">STOCK</label>
+        <input class="form-control" type="number" id="prod-stock" placeholder="e.g. 200">
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="add-btn" onclick="addProduct()">+ Add Product</button>
+  </div>
+
+  <!-- STATS -->
+  <div>
+    <div class="grid-2" style="gap:12px;margin-bottom:12px">
+      <div class="stat-card"><div class="stat-label">Total Products</div><div class="stat-value" style="color:var(--accent)" id="total-products">—</div></div>
+      <div class="stat-card"><div class="stat-label">Top Category</div><div class="stat-value" style="color:var(--accent3);font-size:20px" id="top-category">—</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:12px">Low Stock Alert</div>
+      <div id="low-stock-list"><div style="color:var(--muted);font-size:12px">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- PRODUCTS TABLE -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div class="card-title">All Products</div>
+    <button class="btn btn-secondary" onclick="loadProducts()">🔄 Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Total Revenue</th><th>Units Sold</th><th>Actions</th></tr></thead>
+      <tbody id="products-tbody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadProducts() {
+  try {
+    const data = await API.get('/api/products/performance');
+    document.getElementById('total-products').textContent = data.length;
+
+    // Top category
+    const catCount = {};
+    data.forEach(p => catCount[p.category] = (catCount[p.category] || 0) + 1);
+    const topCat = Object.entries(catCount).sort((a,b) => b[1]-a[1])[0];
+    document.getElementById('top-category').textContent = topCat ? topCat[0] : '—';
+
+    // Low stock
+    const low = data.filter(p => p.stock < 100);
+    document.getElementById('low-stock-list').innerHTML = low.length === 0
+      ? '<div style="color:var(--accent);font-size:12px">✓ All products have adequate stock</div>'
+      : low.map(p => `
+          <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+            <span>${p.name}</span>
+            <span class="badge badge-red">${p.stock} left</span>
+          </div>`).join('');
+
+    // Table
+    document.getElementById('products-tbody').innerHTML = data.map(p => `
+      <tr>
+        <td style="font-weight:500">${p.name}</td>
+        <td><span class="badge badge-blue">${p.category || 'General'}</span></td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">${formatCurrency(p.price || 0)}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">
+          <span class="${p.stock < 100 ? 'badge badge-red' : 'badge badge-green'}">${p.stock}</span>
+        </td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent)">${formatCurrency(p.total_revenue)}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">${formatNumber(p.total_units)}</td>
+        <td>
+          <button class="btn btn-danger" style="padding:5px 10px;font-size:11px" onclick="deleteProduct(${p.id},'${p.name}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function addProduct() {
+  const name = document.getElementById('prod-name').value.trim();
+  const cat = document.getElementById('prod-cat').value.trim();
+  const price = parseFloat(document.getElementById('prod-price').value);
+  const stock = parseInt(document.getElementById('prod-stock').value);
+
+  if (!name || !price) {
+    showAlert('alert-container', 'Name and Price are required', 'error');
+    return;
+  }
+
+  setLoading('add-btn', true);
+  try {
+    await API.post('/api/products/', { name, category: cat || 'General', price, stock: stock || 0 });
+    showAlert('alert-container', `✓ Product "${name}" added successfully`, 'success');
+    document.getElementById('prod-name').value = '';
+    document.getElementById('prod-cat').value = '';
+    document.getElementById('prod-price').value = '';
+    document.getElementById('prod-stock').value = '';
+    loadProducts();
+  } catch(e) {
+    showAlert('alert-container', 'Error: ' + e.message, 'error');
+  }
+  setLoading('add-btn', false);
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`Delete "${name}" and all its sales records? This cannot be undone.`)) return;
+  try {
+    await API.delete(`/api/products/${id}`);
+    showAlert('alert-container', `✓ "${name}" deleted`, 'success');
+    loadProducts();
+  } catch(e) {
+    showAlert('alert-container', 'Error: ' + e.message, 'error');
+  }
+}
+
+loadProducts();
+</script>
+{% endblock %}

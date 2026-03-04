@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Upload Data — SalesCast AI{% endblock %}
+{% block page_title %}Upload Sales Data{% endblock %}
+{% block page_sub %}Import CSV or Excel files to train the AI models{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+  <!-- UPLOAD PANEL -->
+  <div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:4px">Upload Dataset</div>
+      <div class="card-sub" style="margin-bottom:20px">Accepted formats: CSV, XLSX, XLS</div>
+
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">📂</div>
+        <div class="upload-title">Drop file here or click to browse</div>
+        <div class="upload-sub">Max size: 100MB · CSV, XLSX, XLS</div>
+      </div>
+      <input type="file" id="file-input" style="display:none" accept=".csv,.xlsx,.xls" onchange="handleFile(event)">
+
+      <div id="file-preview" style="display:none;margin-top:16px">
+        <div
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div id="file-name" style="font-weight:600;font-size:13px"></div>
+            <div id="file-size"
+              style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:2px"></div>
+          </div>
+          <button class="btn btn-danger" onclick="clearFile()">✕ Remove</button>
+        </div>
+        <div class="progress" style="margin-top:10px">
+          <div class="progress-bar" id="upload-progress" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div id="alert-container" style="margin-top:14px"></div>
+
+      <button class="btn btn-primary btn-full" id="upload-btn" style="margin-top:14px;display:none"
+        onclick="uploadFile()">⬆ Upload & Import</button>
+    </div>
+
+    <!-- FORMAT GUIDE -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-title" style="margin-bottom:12px">📋 Required CSV Format</div>
+      <div
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.8;overflow-x:auto">
+        <span style="color:var(--accent)">date</span>, <span style="color:var(--accent3)">product_name</span>, <span
+          style="color:var(--accent2)">quantity_sold</span>, <span style="color:var(--text)">revenue</span>, <span
+          style="color:var(--muted)">region (opt)</span><br>
+        2024-01-01, Laptop Pro X1, 12, 1020000, North<br>
+        2024-01-01, Wireless Buds, 45, 157500, South<br>
+        2024-01-02, Smart Watch S, 8, 96000, East<br>
+        ...
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--muted)">
+        Optional columns: <code style="font-family:'IBM Plex Mono',monospace;color:var(--accent3)">category</code>,
+        <code style="font-family:'IBM Plex Mono',monospace;color:var(--accent3)">price</code>, <code
+          style="font-family:'IBM Plex Mono',monospace;color:var(--accent3)">stock</code>
+      </div>
+      <a href="/static/sample_data.csv" download style="display:inline-block;margin-top:12px"
+        class="btn btn-secondary">⬇ Download Sample CSV</a>
+    </div>
+  </div>
+
+  <!-- UPLOAD HISTORY -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:16px">Upload History</div>
+    <div id="upload-history">
+      <div style="color:var(--muted);font-size:12px">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<!-- SALES RECORDS TABLE -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <div class="card-title">Sales Records</div>
+      <div class="card-sub">Viewing latest records from database</div>
+    </div>
+    <button class="btn btn-secondary" onclick="loadRecords()">🔄 Refresh</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Product</th>
+          <th>Qty Sold</th>
+          <th>Revenue</th>
+          <th>Region</th>
+        </tr>
+      </thead>
+      <tbody id="records-tbody">
+        <tr>
+          <td colspan="5" style="color:var(--muted);text-align:center;padding:20px">Loading...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div
+    style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:12px;color:var(--muted)">
+    <span id="records-info"></span>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary" id="prev-btn" onclick="changePage(-1)">← Prev</button>
+      <button class="btn btn-secondary" id="next-btn" onclick="changePage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  let currentFile = null;
+  let currentPage = 1;
+  let totalPages = 1;
+
+  const zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file) setFile(file);
+  });
+
+  function handleFile(e) { setFile(e.target.files[0]); }
+
+  function setFile(file) {
+    currentFile = file;
+    document.getElementById('file-preview').style.display = 'block';
+    document.getElementById('upload-btn').style.display = 'block';
+    document.getElementById('file-name').textContent = file.name;
+    document.getElementById('file-size').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  function clearFile() {
+    currentFile = null;
+    document.getElementById('file-preview').style.display = 'none';
+    document.getElementById('upload-btn').style.display = 'none';
+    document.getElementById('file-input').value = '';
+  }
+
+  async function uploadFile() {
+    if (!currentFile) return;
+    setLoading('upload-btn', true);
+    document.getElementById('upload-progress').style.width = '30%';
+
+    const formData = new FormData();
+    formData.append('file', currentFile);
+
+    try {
+      document.getElementById('upload-progress').style.width = '70%';
+      const data = await API.upload('/api/data/upload', formData);
+      document.getElementById('upload-progress').style.width = '100%';
+      showAlert('alert-container', `✓ ${data.message}`, 'success');
+      clearFile();
+      loadRecords();
+      loadHistory();
+    } catch (e) {
+      showAlert('alert-container', 'Upload failed: ' + e.message, 'error');
+      document.getElementById('upload-progress').style.width = '0%';
+    }
+    setLoading('upload-btn', false);
+  }
+
+  async function loadHistory() {
+    try {
+      const data = await API.get('/api/data/uploads');
+      if (!data.length) {
+        document.getElementById('upload-history').innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">No uploads yet. Upload your first dataset!</div>';
+        return;
+      }
+      document.getElementById('upload-history').innerHTML = data.map(u => `
+      <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:500;font-size:13px">📄 ${u.original_name}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge ${u.status === 'success' ? 'badge-green' : 'badge-orange'}">${u.status}</span>
+            <button class="btn btn-icon btn-danger" onclick="deleteUpload(${u.id})" title="Delete this dataset">🗑️</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-top:4px">
+          ${u.rows_imported} rows imported · ${new Date(u.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    `).join('');
+    } catch (e) { }
+  }
+
+  async function deleteUpload(id) {
+    if (!confirm('Are you sure? This will delete the file and all sales records from this upload.')) return;
+    try {
+      await API.delete(`/api/data/delete/${id}`);
+      loadHistory();
+      loadRecords();
+      showAlert('alert-container', '✓ Dataset deleted successfully', 'success');
+    } catch (e) {
+      showAlert('alert-container', 'Delete failed: ' + e.message, 'error');
+    }
+  }
+
+  async function loadRecords() {
+    try {
+      const data = await API.get(`/api/data/records?page=${currentPage}&per_page=15`);
+      totalPages = data.pages;
+      document.getElementById('records-info').textContent = `Showing page ${currentPage} of ${totalPages} (${formatNumber(data.total)} total records)`;
+      document.getElementById('prev-btn').disabled = currentPage <= 1;
+      document.getElementById('next-btn').disabled = currentPage >= totalPages;
+
+      document.getElementById('records-tbody').innerHTML = data.records.map(r => `
+      <tr>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)">${r.date}</td>
+        <td style="font-weight:500">${r.product_name}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">${formatNumber(r.quantity_sold)}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent)">${formatCurrency(r.revenue)}</td>
+        <td><span class="badge badge-blue">${r.region}</span></td>
+      </tr>
+    `).join('');
+    } catch (e) { console.error(e); }
+  }
+
+  function changePage(dir) {
+    currentPage = Math.max(1, Math.min(totalPages, currentPage + dir));
+    loadRecords();
+  }
+
+  loadHistory();
+  loadRecords();
+</script>
+{% endblock %}

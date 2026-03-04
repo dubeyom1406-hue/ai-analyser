@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SalesCast AI — Sales Forecasting System</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+<style>
+  body { display:block; background:var(--bg); }
+  .hero { min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px; position:relative; z-index:1; }
+  .hero-badge { font-family:'IBM Plex Mono',monospace; font-size:11px; border:1px solid var(--accent); color:var(--accent); padding:5px 16px; border-radius:20px; margin-bottom:24px; letter-spacing:1px; display:inline-block; }
+  .hero-title { font-family:'DM Serif Display',serif; font-size:clamp(40px,6vw,80px); line-height:1.1; margin-bottom:20px; max-width:800px; }
+  .hero-title span { color:var(--accent); }
+  .hero-sub { font-size:18px; color:var(--muted); max-width:560px; line-height:1.7; margin-bottom:40px; }
+  .hero-btns { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+  .features { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:900px; margin:60px auto 0; }
+  .feature-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:24px; text-align:left; }
+  .feature-icon { font-size:28px; margin-bottom:12px; }
+  .feature-title { font-weight:600; font-size:15px; margin-bottom:6px; }
+  .feature-desc { font-size:12px; color:var(--muted); line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="hero-badge">⚡ AI-POWERED SALES INTELLIGENCE</div>
+  <h1 class="hero-title">Predict Sales.<br><span>Eliminate Guesswork.</span></h1>
+  <p class="hero-sub">Upload your historical sales data and let our ML models (XGBoost, Random Forest, Linear Regression) predict future demand, optimize inventory, and boost revenue.</p>
+  <div class="hero-btns">
+    <a href="/dashboard" class="btn btn-primary" style="font-size:14px;padding:14px 32px">→ Open Dashboard</a>
+    <a href="/upload" class="btn btn-secondary" style="font-size:14px;padding:14px 32px">📁 Upload Data</a>
+  </div>
+
+  <div class="features">
+    <div class="feature-card"><div class="feature-icon">🔮</div><div class="feature-title">AI Forecasting</div><div class="feature-desc">XGBoost, Random Forest & Linear Regression models trained on your real sales data with 90%+ accuracy.</div></div>
+    <div class="feature-card"><div class="feature-icon">📊</div><div class="feature-title">Live Dashboard</div><div class="feature-desc">Real-time charts, KPIs, demand signals and product performance analytics updated instantly.</div></div>
+    <div class="feature-card"><div class="feature-icon">📁</div><div class="feature-title">Easy Data Import</div><div class="feature-desc">Drag & drop CSV or Excel files. Automatic column detection, validation and database import.</div></div>
+    <div class="feature-card"><div class="feature-icon">⚠️</div><div class="feature-title">Stock Alerts</div><div class="feature-desc">Automatically detect low-stock risk and get reorder recommendations before you run out.</div></div>
+    <div class="feature-card"><div class="feature-icon">📦</div><div class="feature-title">Product Manager</div><div class="feature-desc">Add, update and track all your products with revenue, units sold and stock level monitoring.</div></div>
+    <div class="feature-card"><div class="feature-icon">🗄️</div><div class="feature-title">PostgreSQL / SQLite</div><div class="feature-desc">Production-ready database backend. Works with PostgreSQL or SQLite out of the box.</div></div>
+  </div>
+</div>
+</body>
+</html>

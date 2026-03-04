@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Forecast — SalesCast AI{% endblock %}
+{% block page_title %}Sales Forecast{% endblock %}
+{% block page_sub %}Train ML models and generate future sales predictions{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div id="alert-container"></div>
+
+<div class="grid-main">
+  <!-- CONFIG PANEL -->
+  <div>
+    <!-- Model Selection -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:4px">Configure Forecast</div>
+      <div class="card-sub" style="margin-bottom:20px">Select model, product and timeframe</div>
+
+      <div class="form-group">
+        <label class="form-label">PRODUCT (optional — leave blank for all)</label>
+        <select class="form-control" id="product-select">
+          <option value="">All Products</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">FORECAST HORIZON</label>
+        <select class="form-control" id="days-select">
+          <option value="7">7 Days</option>
+          <option value="14">14 Days</option>
+          <option value="30" selected>30 Days</option>
+          <option value="60">60 Days</option>
+          <option value="90">90 Days</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">ML MODEL</label>
+        <div class="model-card selected" onclick="selectModel(this,'xgboost')">
+          <div class="model-radio" style="background:var(--accent);border-color:var(--accent)"></div>
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">XGBoost</div><div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">gradient boosting · best accuracy</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent)">~94%</span>
+        </div>
+        <div class="model-card" onclick="selectModel(this,'random_forest')">
+          <div class="model-radio"></div>
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">Random Forest</div><div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">ensemble · robust to outliers</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent)">~92%</span>
+        </div>
+        <div class="model-card" onclick="selectModel(this,'linear_regression')">
+          <div class="model-radio"></div>
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">Linear Regression</div><div style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace">baseline · interpretable</div></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent)">~87%</span>
+        </div>
+      </div>
+
+      <input type="hidden" id="selected-model" value="xgboost">
+      <button class="btn btn-primary btn-full" id="run-btn" onclick="runForecast()">⚡ Run Forecast</button>
+    </div>
+
+    <!-- Metrics -->
+    <div class="card" id="metrics-card" style="display:none">
+      <div class="card-title" style="margin-bottom:16px">Model Metrics</div>
+      <div id="metrics-content"></div>
+    </div>
+  </div>
+
+  <!-- CHART PANEL -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-title" style="margin-bottom:4px">Forecast Chart</div>
+      <div class="card-sub" style="margin-bottom:16px" id="chart-subtitle">Run forecast to see predictions</div>
+      <canvas id="forecastChart" height="320"></canvas>
+    </div>
+
+    <div class="card" id="summary-card" style="display:none">
+      <div class="card-title" style="margin-bottom:16px">Forecast Summary</div>
+      <div id="forecast-summary"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPARE ALL MODELS -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <div class="card-title">Model Comparison</div>
+      <div class="card-sub">Train all 3 models and compare accuracy</div>
+    </div>
+    <button class="btn btn-secondary" id="compare-btn" onclick="compareModels()">🔬 Compare All Models</button>
+  </div>
+  <div id="compare-result">
+    <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Click "Compare All Models" to train and benchmark all 3 algorithms</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedModel = 'xgboost';
+let forecastChart = null;
+
+function selectModel(card, model) {
+  document.querySelectorAll('.model-card').forEach(c => {
+    c.classList.remove('selected');
+    const r = c.querySelector('.model-radio');
+    r.style.background = 'transparent';
+    r.style.borderColor = 'var(--border)';
+  });
+  card.classList.add('selected');
+  const r = card.querySelector('.model-radio');
+  r.style.background = 'var(--accent)';
+  r.style.borderColor = 'var(--accent)';
+  selectedModel = model;
+  document.getElementById('selected-model').value = model;
+}
+
+async function loadProducts() {
+  const data = await API.get('/api/products/');
+  const sel = document.getElementById('product-select');
+  data.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+}
+
+async function runForecast() {
+  setLoading('run-btn', true);
+  const model = selectedModel;
+  const days = parseInt(document.getElementById('days-select').value);
+  const productId = document.getElementById('product-select').value || null;
+
+  try {
+    const data = await API.post('/api/forecast/run', {
+      model_type: model,
+      days: days,
+      product_id: productId ? parseInt(productId) : null,
+    });
+
+    // Show metrics
+    const m = data.metrics;
+    document.getElementById('metrics-card').style.display = 'block';
+    document.getElementById('metrics-content').innerHTML = `
+      <div class="metric-row"><span class="metric-key">Model</span><span class="metric-val" style="color:var(--accent)">${m.model_type.replace('_',' ').toUpperCase()}</span></div>
+      <div class="metric-row"><span class="metric-key">Accuracy (R²)</span><span class="metric-val" style="color:var(--accent)">${m.accuracy}%</span></div>
+      <div class="metric-row"><span class="metric-key">MAE</span><span class="metric-val">${m.mae} units</span></div>
+      <div class="metric-row"><span class="metric-key">RMSE</span><span class="metric-val">${m.rmse} units</span></div>
+      <div class="metric-row"><span class="metric-key">Training Samples</span><span class="metric-val">${formatNumber(m.training_samples)}</span></div>
+    `;
+
+    // Show summary
+    document.getElementById('summary-card').style.display = 'block';
+    document.getElementById('forecast-summary').innerHTML = `
+      <div class="metric-row"><span class="metric-key">Forecast Period</span><span class="metric-val">${days} days</span></div>
+      <div class="metric-row"><span class="metric-key">Total Predicted Units</span><span class="metric-val" style="color:var(--accent)">${formatNumber(data.total_predicted_units)}</span></div>
+      <div class="metric-row"><span class="metric-key">Total Predicted Revenue</span><span class="metric-val" style="color:var(--accent)">${formatCurrency(data.total_predicted_revenue)}</span></div>
+      <div class="metric-row"><span class="metric-key">Peak Predicted Day</span><span class="metric-val">${getPeakDay(data.predictions)}</span></div>
+    `;
+
+    // Draw chart
+    const labels = data.predictions.map(p => p.date);
+    const vals = data.predictions.map(p => p.predicted_quantity);
+    const lowers = data.predictions.map(p => p.lower);
+    const uppers = data.predictions.map(p => p.upper);
+
+    const ctx = document.getElementById('forecastChart').getContext('2d');
+    if (forecastChart) forecastChart.destroy();
+
+    forecastChart = new Chart(ctx, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Predicted Units',
+            data: vals,
+            borderColor: '#00E5A0',
+            backgroundColor: 'rgba(0,229,160,0.08)',
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: true,
+            pointRadius: 3,
+            pointBackgroundColor: '#00E5A0',
+          },
+          {
+            type: 'line',
+            label: 'Upper Bound',
+            data: uppers,
+            borderColor: 'rgba(0,229,160,0.25)',
+            borderDash: [4,4],
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: false,
+          },
+          {
+            type: 'line',
+            label: 'Lower Bound',
+            data: lowers,
+            borderColor: 'rgba(0,229,160,0.25)',
+            borderDash: [4,4],
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: '-1',
+            backgroundColor: 'rgba(0,229,160,0.04)',
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#5A8070', font: { family: 'IBM Plex Mono', size: 10 } } } },
+        scales: {
+          x: { ticks: { color:'#5A8070', maxTicksLimit:10, font:{family:'IBM Plex Mono',size:10} }, grid:{color:'rgba(26,45,56,0.6)'} },
+          y: { ticks: { color:'#5A8070', font:{family:'IBM Plex Mono',size:10} }, grid:{color:'rgba(26,45,56,0.6)'} },
+        }
+      }
+    });
+
+    document.getElementById('chart-subtitle').textContent = `${days}-day prediction using ${model.replace('_',' ')} — ${m.accuracy}% accuracy`;
+
+  } catch(e) {
+    showAlert('alert-container', 'Error: ' + e.message, 'error');
+  }
+  setLoading('run-btn', false);
+}
+
+function getPeakDay(predictions) {
+  const peak = predictions.reduce((a, b) => a.predicted_quantity > b.predicted_quantity ? a : b);
+  return peak.date;
+}
+
+async function compareModels() {
+  setLoading('compare-btn', true);
+  const productId = document.getElementById('product-select').value || null;
+  try {
+    const data = await API.post('/api/forecast/compare', {
+      product_id: productId ? parseInt(productId) : null
+    });
+    const c = data.comparison;
+    const models = ['xgboost', 'random_forest', 'linear_regression'];
+    const labels = {'xgboost':'XGBoost','random_forest':'Random Forest','linear_regression':'Linear Regression'};
+
+    document.getElementById('compare-result').innerHTML = `
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Model</th><th>Accuracy</th><th>R² Score</th><th>MAE</th><th>RMSE</th><th>Samples</th><th>Best?</th></tr></thead>
+        <tbody>
+          ${models.map(m => {
+            const d = c[m];
+            const isBest = d.accuracy === Math.max(...models.map(x => c[x].accuracy));
+            return `<tr>
+              <td style="font-weight:600">${labels[m]}</td>
+              <td style="color:var(--accent);font-family:'IBM Plex Mono',monospace">${d.accuracy}%</td>
+              <td style="font-family:'IBM Plex Mono',monospace">${d.r2}</td>
+              <td style="font-family:'IBM Plex Mono',monospace">${d.mae}</td>
+              <td style="font-family:'IBM Plex Mono',monospace">${d.rmse}</td>
+              <td style="font-family:'IBM Plex Mono',monospace">${formatNumber(d.training_samples)}</td>
+              <td>${isBest ? '<span class="badge badge-green">⚡ BEST</span>' : '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+    `;
+  } catch(e) {
+    showAlert('alert-container', 'Error: ' + e.message, 'error');
+  }
+  setLoading('compare-btn', false);
+}
+
+loadProducts();
+</script>
+{% endblock %}
